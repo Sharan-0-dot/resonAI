@@ -199,5 +199,113 @@
     ],
     "action": "run_analysis",
     "clarifying_question": null
+  },
+  "edb2c7b49edb185fc126bd64c44f8bbd0201075ce618574a67676dfb83a83321": {
+    "assistant_message": "Removed all existing components and added a camera at the free end of member m2 (right end).",
+    "ops": [
+      {
+        "op": "remove_component",
+        "args": {
+          "id": "motor_left"
+        }
+      },
+      {
+        "op": "remove_component",
+        "args": {
+          "id": "motor_right"
+        }
+      },
+      {
+        "op": "remove_component",
+        "args": {
+          "id": "camera"
+        }
+      },
+      {
+        "op": "remove_component",
+        "args": {
+          "id": "imu"
+        }
+      },
+      {
+        "op": "remove_component",
+        "args": {
+          "id": "battery_center"
+        }
+      },
+      {
+        "op": "add_component",
+        "args": {
+          "id": "camera_end",
+          "kind": "camera",
+          "member": "m2",
+          "s": 1.0,
+          "mass": 0.15,
+          "mount": {
+            "preset": "silicone_gel",
+            "kv": 40000.0,
+            "zeta": 0.15
+          },
+          "limit_g": 0.5
+        }
+      }
+    ],
+    "action": "run_analysis",
+    "clarifying_question": null
+  },
+  "30258437f90dbc724239027f4801a9d4c47e7fa265fd71545f236e76b62e0da0": {
+    "assistant_message": "Added two cooling fans at each end of the beam and a camera at the center of the beam.",
+    "ops": [
+      {
+        "op": "add_component",
+        "args": {
+          "id": "fan_left",
+          "kind": "fan",
+          "member": "m1",
+          "s": 0.0,
+          "mass": 0.2,
+          "mount": {
+            "preset": "silicone_gel",
+            "kv": 40000.0,
+            "zeta": 0.15
+          },
+          "limit_g": 0.5
+        }
+      },
+      {
+        "op": "add_component",
+        "args": {
+          "id": "fan_right",
+          "kind": "fan",
+          "member": "m1",
+          "s": 1.0,
+          "mass": 0.2,
+          "mount": {
+            "preset": "silicone_gel",
+            "kv": 40000.0,
+            "zeta": 0.15
+          },
+          "limit_g": 0.5
+        }
+      },
+      {
+        "op": "add_component",
+        "args": {
+          "id": "camera_center",
+          "kind": "camera",
+          "member": "m1",
+          "s": 0.5,
+          "mass": 0.15,
+          "mount": {
+            "preset": "silicone_gel",
+            "kv": 40000.0,
+            "zeta": 0.15
+          },
+          "limit_g": 0.5
+        }
+      }
+    ],
+    "action": "run_analysis",
+    "clarifying_question": null
   }
 }

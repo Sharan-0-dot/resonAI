@@ -293,6 +293,7 @@ export const useStore = create<Store>((set, get) => ({
       design: c.design,
       activeCandidate: c,
       analysis: null,
+      responseAt: null,
     });
   },
 

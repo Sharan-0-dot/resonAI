@@ -232,6 +232,7 @@ class Finding(BaseModel):
 
     id: str
     severity: Literal["ok", "warning", "critical", "info"]
+    before_severity: Optional[str] = None
     type: str
     component: Optional[str] = None
     rpm: Optional[float] = None
@@ -376,6 +377,9 @@ class CandidateBlock(BaseModel):
     robust_worst_case_after: float
     verified: bool = True
     findings: Optional[List[Finding]] = None
+    findings_before_counts: Optional[Dict[str, int]] = None
+    findings_after_counts: Optional[Dict[str, int]] = None
+    findings_diff: Optional[Dict[str, List[Finding]]] = None
 
 
 class OptimizeResponse(BaseModel):

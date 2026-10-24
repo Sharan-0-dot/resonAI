@@ -179,6 +179,7 @@ export type FindingType =
 export interface Finding {
   id: string;
   severity: FindingSeverity;
+  before_severity?: FindingSeverity;
   type: FindingType;
   component?: string;
   rpm?: number;
@@ -279,6 +280,13 @@ export interface OptimizeCandidate {
   robust_worst_case_after?: number;
   verified?: boolean;
   findings?: Finding[];
+  findings_before_counts?: Record<string, number>;
+  findings_after_counts?: Record<string, number>;
+  findings_diff?: {
+    resolved: Finding[];
+    remaining: Finding[];
+    new: Finding[];
+  };
 }
 
 export interface OptimizeResult {

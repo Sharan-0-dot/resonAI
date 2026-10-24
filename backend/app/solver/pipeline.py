@@ -138,7 +138,25 @@ def solve_design(
 
     # 7. Sweep frequencies
     if rpm_array is None:
-        rpms = np.linspace(rpm_min, rpm_max, n_points)
+        rpms_uniform = np.linspace(rpm_min, rpm_max, n_points)
+        # B1: Mode-crossing RPM refinement points (union of uniform grid and crossing points)
+        refinement_points: List[float] = []
+        for fm in non_rigid_freqs:
+            if fm <= 0.1:
+                continue
+            for o in sorted_orders:
+                if o > 0:
+                    rpm_c = 60.0 * float(fm) / float(o)
+                    if rpm_min <= rpm_c <= rpm_max:
+                        refinement_points.extend([
+                            rpm_c * 0.998,
+                            rpm_c,
+                            rpm_c * 1.002,
+                        ])
+        if refinement_points:
+            rpms = np.sort(np.unique(np.concatenate([rpms_uniform, np.array(refinement_points, dtype=float)])))
+        else:
+            rpms = rpms_uniform
     else:
         rpms = np.asarray(rpm_array, dtype=float)
 

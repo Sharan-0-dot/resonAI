@@ -17,6 +17,7 @@ from app.schemas import (
     ComponentModel,
     ComponentMetrics,
     DesignModel,
+    Finding,
     LocksModel,
     MetricsBlock,
     OptimizeResponse,
@@ -146,21 +147,99 @@ def evaluate_candidate(
                     if rel_amp > 0.005:
                         pen += 10.0 * (rel_amp - 0.005) * 1000.0
 
-        J_scale = worst_accel_ratio + 0.3 * (stress_ratio / 0.5) + pen
+        # B4: Small margin penalty to prefer margin below 70% of limit
+        margin_penalty = 0.5 * max(0.0, worst_accel_ratio - 0.7)
+        J_scale = worst_accel_ratio + margin_penalty + 0.3 * (stress_ratio / 0.5) + pen
         objectives.append(J_scale)
 
     J_worst = max(objectives)
     return J_worst, nominal_peak
 
 
+def finding_match_key(f: Union[Finding, Dict[str, Any]]) -> tuple:
+    """Deterministic matching key for findings diffing."""
+    if hasattr(f, "type"):
+        ftype = f.type
+        mode = f.mode
+        comp = f.component
+    else:
+        ftype = f.get("type", "")
+        mode = f.get("mode")
+        comp = f.get("component")
+
+    if ftype == "resonance":
+        return ("resonance", mode)
+    elif ftype in ("limit_exceeded", "mount_amplification"):
+        return (ftype, comp)
+    else:
+        return (ftype,)
+
+
+def compute_findings_diff_and_counts(
+    findings_before_raw: List[Any],
+    findings_after_raw: List[Any],
+) -> Tuple[Dict[str, int], Dict[str, int], Dict[str, List[Finding]]]:
+    """Compute findings counts and diff blocks (resolved, remaining, new) between states."""
+    f_before = [
+        f if isinstance(f, Finding) else Finding.model_validate(f)
+        for f in findings_before_raw
+    ]
+    f_after = [
+        f if isinstance(f, Finding) else Finding.model_validate(f)
+        for f in findings_after_raw
+    ]
+
+    def count_sevs(flist: List[Finding]) -> Dict[str, int]:
+        counts = {"critical": 0, "warning": 0, "ok": 0}
+        for f in flist:
+            if f.severity in counts:
+                counts[f.severity] += 1
+            else:
+                counts[f.severity] = 1
+        return counts
+
+    before_counts = count_sevs(f_before)
+    after_counts = count_sevs(f_after)
+
+    before_map = {finding_match_key(f): f for f in f_before}
+    after_map = {finding_match_key(f): f for f in f_after}
+
+    resolved: List[Finding] = []
+    remaining: List[Finding] = []
+    new: List[Finding] = []
+
+    for k, fb in before_map.items():
+        if k in after_map:
+            fa = after_map[k]
+            fa_copy = fa.model_copy()
+            if fb.severity != fa.severity:
+                fa_copy.before_severity = fb.severity
+            remaining.append(fa_copy)
+        else:
+            resolved.append(fb)
+
+    for k, fa in after_map.items():
+        if k not in before_map:
+            new.append(fa)
+
+    findings_diff = {
+        "resolved": resolved,
+        "remaining": remaining,
+        "new": new,
+    }
+
+    return before_counts, after_counts, findings_diff
+
+
 def run_full_verification(
     design: Dict[str, Any],
     rpm_points: int = 1000,
 ) -> Tuple[MetricsBlock, List[Any], float]:
-    """Execute full 1000-point direct solve verification for honest reporting."""
+    """Execute full direct solve verification for honest reporting."""
     d_ver = copy.deepcopy(design)
     if "analysis" not in d_ver:
         d_ver["analysis"] = {}
+    d_ver["analysis"]["n_points"] = rpm_points
     d_ver["analysis"]["rpm_points"] = rpm_points
     d_ver["analysis"]["method"] = "full"
 
@@ -254,7 +333,7 @@ def optimize_design(
     search_design = make_search_design(orig_design)
 
     # Pre-computation: Baseline verification with 1000-point full solve
-    metrics_before, _, baseline_worst_sens = run_full_verification(orig_design, rpm_points=1000)
+    metrics_before, findings_before, baseline_worst_sens = run_full_verification(orig_design, rpm_points=1000)
 
     # Define optimization plans
     # Plan 1: Best overall (kv and zeta free, respecting locks)
@@ -433,6 +512,10 @@ def optimize_design(
     final_blocks: List[CandidateBlock] = []
 
     for rank_idx, c in enumerate(final_raw[:2]):
+        before_counts, after_counts, f_diff = compute_findings_diff_and_counts(
+            findings_before, c["findings"]
+        )
+
         block = CandidateBlock(
             rank=rank_idx + 1,
             label=c["label"],
@@ -444,6 +527,9 @@ def optimize_design(
             robust_worst_case_after=c["robust_worst_case_after"],
             verified=True,
             findings=c["findings"],
+            findings_before_counts=before_counts,
+            findings_after_counts=after_counts,
+            findings_diff=f_diff,
         )
         final_blocks.append(block)
 
@@ -452,6 +538,21 @@ def optimize_design(
             notes.append(
                 f"Candidate {rank_idx + 1} ({c['label']}): robust worst case under +/-20% stiffness variation "
                 f"is {c['robust_worst_case_after']:.3f} g (>1.5x nominal {c['worst_sens_after']:.3f} g)."
+            )
+
+        # Check if margin to limit target (0.7) was reached
+        worst_sens_ratio_after = 0.0
+        for comp_m in c["metrics_after"].components.values():
+            if comp_m.limit_g and comp_m.limit_g > 0:
+                r = comp_m.peak_accel_g / comp_m.limit_g
+                if r > worst_sens_ratio_after:
+                    worst_sens_ratio_after = r
+
+        if worst_sens_ratio_after > 0.7:
+            margin_pct = max(0.0, (1.0 - worst_sens_ratio_after) * 100.0)
+            notes.append(
+                f"Margin to limit is {margin_pct:.0f}%; mount changes alone cannot reach the 30% margin target; "
+                f"consider repositioning the sensor or adding mass damping."
             )
 
     elapsed = (time.perf_counter() - t_start) * 1000.0

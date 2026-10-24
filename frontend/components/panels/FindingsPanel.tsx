@@ -11,6 +11,7 @@ import {
   Crosshair,
   MessageSquare,
   Sparkles,
+  ArrowRight,
 } from "lucide-react";
 import { useStore } from "@/lib/store/useStore";
 import type { Finding, FindingSeverity } from "@/lib/types/contract";
@@ -65,43 +66,66 @@ function getFindingTitle(f: Finding): string {
 
 function FindingCard({
   finding,
+  diffStatus,
   onShow,
   onAskCopilot,
 }: {
   finding: Finding;
+  diffStatus?: "resolved" | "remaining" | "new";
   onShow: () => void;
   onAskCopilot: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = SEVERITY_CONFIG[finding.severity] ?? SEVERITY_CONFIG.info;
-  const Icon = cfg.icon;
+  const isResolved = diffStatus === "resolved";
+  const isNew = diffStatus === "new";
+  const Icon = isResolved ? CheckCircle2 : cfg.icon;
 
   return (
     <div
       className={clsx(
         "rounded-md border border-line bg-surface p-3 transition-colors shadow-2xs",
-        cfg.edge
+        isResolved ? "border-l-4 border-ok opacity-75" : cfg.edge
       )}
     >
       {/* Title row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <Icon size={14} className={clsx("shrink-0", cfg.badge.split(" ")[1])} />
-          <span className="font-semibold text-xs text-ink truncate">{getFindingTitle(finding)}</span>
+          <Icon size={14} className={clsx("shrink-0", isResolved ? "text-ok" : cfg.badge.split(" ")[1])} />
+          <span
+            className={clsx(
+              "font-semibold text-xs truncate",
+              isResolved ? "line-through text-muted" : "text-ink"
+            )}
+          >
+            {getFindingTitle(finding)}
+          </span>
           {finding.component && (
             <span className="font-mono text-[10px] bg-panel border border-line-subtle px-1.5 py-0.2 rounded text-ink-2 shrink-0">
               {finding.component}
             </span>
           )}
-        </div>
-        <span
-          className={clsx(
-            "rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase tracking-wider shrink-0 font-mono",
-            cfg.badge
+          {isNew && (
+            <span className="rounded bg-accent px-1.5 py-0.2 text-[9px] font-bold uppercase text-white tracking-wider shrink-0 font-mono">
+              NEW
+            </span>
           )}
-        >
-          {cfg.label}
-        </span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {finding.before_severity && finding.before_severity !== finding.severity && (
+            <span className="rounded px-1.5 py-0.2 text-[9px] font-mono text-muted line-through">
+              {finding.before_severity}
+            </span>
+          )}
+          <span
+            className={clsx(
+              "rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase tracking-wider font-mono",
+              isResolved ? "bg-ok-soft text-ok" : cfg.badge
+            )}
+          >
+            {isResolved ? "RESOLVED" : cfg.label}
+          </span>
+        </div>
       </div>
 
       {/* Key Numbers */}
@@ -168,6 +192,7 @@ function FindingCard({
 
 export default function FindingsPanel() {
   const analysis = useStore((s) => s.analysis);
+  const activeCandidate = useStore((s) => s.activeCandidate);
   const focusFinding = useStore((s) => s.focusFinding);
   const setUi = useStore((s) => s.setUi);
   const addChatMessage = useStore((s) => s.addChatMessage);
@@ -205,9 +230,27 @@ export default function FindingsPanel() {
     });
   };
 
+  const hasDiff = Boolean(activeCandidate?.findings_diff);
+
   return (
     <div className="h-full overflow-y-auto p-3 space-y-3">
-      {actionableFindings.length === 0 && infoFindings.length === 0 ? (
+      {/* Before -> After Strip */}
+      {activeCandidate?.findings_before_counts && activeCandidate?.findings_after_counts && (
+        <div className="rounded-md border border-line bg-panel p-2.5 flex items-center justify-between text-xs font-mono shadow-2xs">
+          <span className="text-[11px] text-muted font-sans font-medium">Auto-Fix Diff:</span>
+          <div className="flex items-center gap-2">
+            <span className="text-danger font-semibold">
+              {activeCandidate.findings_before_counts.critical ?? 0} critical, {activeCandidate.findings_before_counts.warning ?? 0} warning
+            </span>
+            <ArrowRight size={12} className="text-muted" />
+            <span className="text-ok font-semibold">
+              {activeCandidate.findings_after_counts.critical ?? 0} critical, {activeCandidate.findings_after_counts.warning ?? 0} warning
+            </span>
+          </div>
+        </div>
+      )}
+
+      {actionableFindings.length === 0 && infoFindings.length === 0 && !hasDiff ? (
         <div className="flex h-full flex-col items-center justify-center p-6 text-center text-xs text-ok">
           <CheckCircle2 size={24} className="mb-2" />
           <p className="font-semibold text-sm text-ink">All Components Safe</p>
@@ -217,14 +260,51 @@ export default function FindingsPanel() {
         </div>
       ) : (
         <>
-          {actionableFindings.map((f) => (
-            <FindingCard
-              key={f.id}
-              finding={f}
-              onShow={() => focusFinding(f)}
-              onAskCopilot={() => handleAskCopilot(f)}
-            />
-          ))}
+          {hasDiff && activeCandidate?.findings_diff ? (
+            <>
+              {/* Resolved findings */}
+              {activeCandidate.findings_diff.resolved.map((f) => (
+                <FindingCard
+                  key={`res-${f.id}`}
+                  finding={f}
+                  diffStatus="resolved"
+                  onShow={() => focusFinding(f)}
+                  onAskCopilot={() => handleAskCopilot(f)}
+                />
+              ))}
+
+              {/* Remaining findings */}
+              {activeCandidate.findings_diff.remaining.map((f) => (
+                <FindingCard
+                  key={`rem-${f.id}`}
+                  finding={f}
+                  diffStatus="remaining"
+                  onShow={() => focusFinding(f)}
+                  onAskCopilot={() => handleAskCopilot(f)}
+                />
+              ))}
+
+              {/* New findings */}
+              {activeCandidate.findings_diff.new.map((f) => (
+                <FindingCard
+                  key={`new-${f.id}`}
+                  finding={f}
+                  diffStatus="new"
+                  onShow={() => focusFinding(f)}
+                  onAskCopilot={() => handleAskCopilot(f)}
+                />
+              ))}
+            </>
+          ) : (
+            actionableFindings.map((f) => (
+              <FindingCard
+                key={f.id}
+                finding={f}
+                onShow={() => focusFinding(f)}
+                onAskCopilot={() => handleAskCopilot(f)}
+              />
+            ))
+          )}
 
           {/* Grouped info items: Collapsed "Other notes" */}
           {infoFindings.length > 0 && (

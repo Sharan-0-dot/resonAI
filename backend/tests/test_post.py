@@ -180,16 +180,17 @@ def test_contract_drone_response_validity():
     assert "NaN" not in json_str
     assert "Infinity" not in json_str
 
-    # Verify array dimensions
-    n_points = drone_design["analysis"]["n_points"]
+    # Verify array dimensions (sweep includes n_points plus mode crossing refinement points)
+    n_points_min = drone_design["analysis"]["n_points"]
     n_nodes = len(response_dict["mesh_nodes"])
     sweep = response_dict["sweep"]
+    n_actual = len(sweep["rpm"])
 
-    assert len(sweep["rpm"]) == n_points
-    assert len(sweep["freq_hz"]) == n_points
-    assert len(sweep["node_amp_mm"]) == n_points
+    assert n_actual >= n_points_min
+    assert len(sweep["freq_hz"]) == n_actual
+    assert len(sweep["node_amp_mm"]) == n_actual
     assert len(sweep["node_amp_mm"][0]) == n_nodes
-    assert len(sweep["component_accel_g"]["camera"]) == n_points
+    assert len(sweep["component_accel_g"]["camera"]) == n_actual
 
 
 def test_response_at_endpoint(client: TestClient):

@@ -160,6 +160,19 @@ export default function ComparePanel() {
               {(stressAfter * 100).toFixed(0)}%
             </span>
           </div>
+
+          {/* Before -> After findings strip */}
+          {cand.findings_before_counts && cand.findings_after_counts && (
+            <div className="hidden md:flex items-center gap-1.5 font-mono text-[11px] bg-surface px-2 py-0.5 rounded border border-line">
+              <span className="text-danger font-medium">
+                {cand.findings_before_counts.critical ?? 0} critical, {cand.findings_before_counts.warning ?? 0} warning
+              </span>
+              <ArrowRight size={11} className="text-muted" />
+              <span className="text-ok font-semibold">
+                {cand.findings_after_counts.critical ?? 0} critical, {cand.findings_after_counts.warning ?? 0} warning
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Changes Made List */}

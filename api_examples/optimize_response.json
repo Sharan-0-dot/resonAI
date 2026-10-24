@@ -680,7 +680,124 @@
           },
           "detail": "Mount frequencies for motor_left (214.6 Hz), motor_right (214.6 Hz), camera (82.2 Hz), imu (225.1 Hz) sit in vibration amplification zones (r < sqrt(2)) within the operating range"
         }
-      ]
+      ],
+      "findings_before_counts": {
+        "critical": 4,
+        "warning": 1,
+        "ok": 0
+      },
+      "findings_after_counts": {
+        "critical": 0,
+        "warning": 5,
+        "ok": 0
+      },
+      "findings_diff": {
+        "resolved": [
+          {
+            "id": "f3",
+            "severity": "critical",
+            "type": "resonance",
+            "component": "motor_left, motor_right",
+            "rpm": 3185.1,
+            "value": 0.0,
+            "limit": null,
+            "mode": 4,
+            "mode_f_hz": 53.09,
+            "position": {
+              "member": "m1",
+              "s": 0.0
+            },
+            "detail": "1x excitation from 'motor_left' and 'motor_right' at 3185 RPM (53.1 Hz) is within 0.0% of mode 4 (53.1 Hz)"
+          }
+        ],
+        "remaining": [
+          {
+            "id": "f1",
+            "severity": "warning",
+            "before_severity": "critical",
+            "type": "limit_exceeded",
+            "component": "camera",
+            "rpm": 3454.0,
+            "value": 0.49,
+            "limit": 0.5,
+            "mode": 5,
+            "mode_f_hz": 59.7,
+            "position": {
+              "member": "m2",
+              "s": 0.15
+            },
+            "detail": "Component 'camera' peak acceleration 0.49 g RMS = 97% of limit (limit 0.50 g RMS) at 3454 RPM (excitation is 1.00x of mode 5 at 59.7 Hz)"
+          },
+          {
+            "id": "f2",
+            "severity": "warning",
+            "before_severity": "critical",
+            "type": "limit_exceeded",
+            "component": "imu",
+            "rpm": 3481.0,
+            "value": 0.8,
+            "limit": 1.0,
+            "mode": 5,
+            "mode_f_hz": 59.7,
+            "position": {
+              "member": "m1",
+              "s": 0.85
+            },
+            "detail": "Component 'imu' peak acceleration 0.80 g RMS = 80% of limit (limit 1.00 g RMS) at 3481 RPM (excitation is 1.00x of mode 5 at 59.7 Hz)"
+          },
+          {
+            "id": "f4",
+            "severity": "warning",
+            "before_severity": "critical",
+            "type": "resonance",
+            "component": "motor_left, motor_right",
+            "rpm": 3583.0,
+            "value": 0.0,
+            "limit": null,
+            "mode": 5,
+            "mode_f_hz": 59.7,
+            "position": {
+              "member": "m1",
+              "s": 0.85
+            },
+            "detail": "Resonance remains at 3583 RPM (59.7 Hz) but no component exceeds its limit: camera 0.49 g RMS of 0.50 g, imu 0.80 g RMS of 1.00 g, stress 0.8% of yield. Avoid dwelling at this speed."
+          },
+          {
+            "id": "f5",
+            "severity": "warning",
+            "type": "mount_amplification",
+            "component": "motor_left, motor_right, camera, imu",
+            "rpm": null,
+            "value": 32.9,
+            "limit": 46.5,
+            "mode": null,
+            "mode_f_hz": null,
+            "position": {
+              "member": "m1",
+              "s": 0.0
+            },
+            "detail": "Mount frequencies for motor_left (214.6 Hz), motor_right (214.6 Hz), camera (32.9 Hz), imu (490.9 Hz) sit in vibration amplification zones (r < sqrt(2)) within the operating range"
+          }
+        ],
+        "new": [
+          {
+            "id": "f0",
+            "severity": "warning",
+            "type": "resonance",
+            "component": "motor_left, motor_right",
+            "rpm": 2251.0,
+            "value": 0.0,
+            "limit": null,
+            "mode": 3,
+            "mode_f_hz": 37.5,
+            "position": {
+              "member": "m1",
+              "s": 0.0
+            },
+            "detail": "Resonance remains at 2251 RPM (37.5 Hz) but no component exceeds its limit: camera 0.49 g RMS of 0.50 g, imu 0.80 g RMS of 1.00 g, stress 0.8% of yield. Avoid dwelling at this speed."
+          }
+        ]
+      }
     }
   ],
   "best_index": 0,

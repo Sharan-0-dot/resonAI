@@ -1,8 +1,8 @@
 # PROGRESS (backend / Person 1)
 
 ## Status
-Current milestone: Agent cache-flow repair - Complete
-Last updated: 2026-10-23 20:05 UTC
+Current milestone: FIX-FLOW CHECK (Findings truthfulness, consequence-aware severity, grid alignment) - Complete
+Last updated: 2026-10-24 04:05 UTC
 
 ## Milestones
 - [x] M0 Skeleton: FastAPI, CORS, .env, presets, schemas, mock /analyze
@@ -18,6 +18,73 @@ Last updated: 2026-10-23 20:05 UTC
 - [x] M8 Hardening: perf, contract tests, drone demo tuning, frontend readiness
 - [x] Frontend Performance Fix (Phase 1): 60 FPS loop, InstancedMesh, Plotly memoization, granular selectors, response_at cache
 - [x] Frontend Layout & UX Cleanup (Phase 2): Light theme design tokens, Linear/Figma aesthetic, 48px top bar, 4-step workflow, 71.6% viewport share, focus mode
+- [x] FIX-FLOW CHECK: Reproduction, consequence-aware resonance grading, mode-crossing grid refinement, findings diff additive contract, and frontend Before -> After UI
+
+## Milestone FIX-FLOW CHECK: Findings Truthfulness, Consequence-Aware Severity, and Grid Alignment
+### What Was Built & Files Touched
+- `scripts/fix_flow_check.py`: Automated diagnostic script loading drone preset, running `/analyze`, running `/optimize`, applying `candidate[0].design`, and printing before/after findings tables, diffs, sensitive component metrics, and grid sampling comparisons.
+- `backend/app/solver/pipeline.py`: Added mode-crossing RPM refinement points ($\pm 0.2\%$ flanking bands for each non-rigid mode across harmonic orders) to the frequency sweep, unioned with the uniform grid and deduplicated (Rule B1). Discrepancy between `/analyze` and optimizer verification reduced to 0.00% (IMU) and 0.20% (camera).
+- `backend/app/solver/post.py`:
+  - Added named thresholds `RESONANCE_CROSSING_CRITICAL_BAND = 0.05`, `STRESS_RATIO_CRITICAL_THRESHOLD = 0.50`, and `CLEARANCE_MM = 5.0` with explanatory comments (Rule B2).
+  - Implemented consequence-aware resonance severity: a crossing within 5% is critical ONLY if a sensitive payload exceeds its limit, stress ratio > 0.50, displacement exceeds clearance, or no limits are defined. Otherwise, it is graded `warning` with explicit component values and stress percentages in the detail string.
+  - Updated `limit_exceeded` detail string to explicitly report the ratio and margin (e.g. `0.49 g RMS = 97% of limit`) (Rule B3).
+- `backend/app/optimizer/optimize.py`:
+  - Added margin penalty `0.5 * max(0.0, worst_accel_ratio - 0.7)` to the objective $J$ to encourage margin below 70% of payload limits when bounds allow (Rule B4).
+  - Appends plain note when bounds prevent achieving a 30% margin.
+  - Implemented `compute_findings_diff_and_counts` and populated `findings_before_counts`, `findings_after_counts`, and `findings_diff` (`resolved`, `remaining`, `new`) on each candidate (Rule B5).
+- `backend/app/schemas.py`: Added additive fields `before_severity` to `Finding`, and `findings_before_counts`, `findings_after_counts`, `findings_diff` to `CandidateBlock`.
+- `api_examples/optimize_response.json`: Updated sample candidate with additive findings diff and count blocks.
+- `frontend/lib/types/contract.ts`: Added matching additive TypeScript types (`before_severity`, `findings_before_counts`, `findings_after_counts`, `findings_diff`).
+- `frontend/lib/store/useStore.ts`: Updated `applyCandidate` to cleanly invalidate old analysis, clear `responseAt: null`, and preserve candidate state.
+- `frontend/components/panels/FindingsPanel.tsx`: Added compact Before -> After findings strip (`4 critical, 1 warning -> 0 critical, 5 warning`) and rendered RESOLVED items with a green check and strikethrough title, REMAINING items with severity transition pills, and NEW items with a "NEW" badge.
+- `frontend/components/panels/ComparePanel.tsx`: Added matching Before -> After findings strip.
+- `backend/tests/test_fix_flow.py`: Added 4 tests verifying generic consequence-aware rules, rpm_max=9000 mode-5 resonance detection, end-to-end drone optimization flow with 0 critical findings after fix, and findings diff block structure.
+- `backend/tests/test_post.py`: Updated sweep dimension assertion to account for mode-crossing refinement points.
+- `FIX_FLOW_REPORT.md`: Documented full reproduction, diagnosis, classifications, and verification gate results.
+
+### Test Results
+- `cd backend && pytest -m "not slow"`:
+  ```
+  69 passed, 2 skipped, 11 deselected, 1 warning in 14.55s
+  ```
+- `cd backend && pytest -m "slow"`:
+  ```
+  11 passed, 71 deselected, 1 warning in 163.20s (2m 43s)
+  ```
+- `cd frontend && npm run check:contract`:
+  ```
+  === ResonAI Frontend Contract Check ===
+  Checking /analyze schema compliance on: Mock file...
+  ✓ Mock file: All 8 contract blocks strictly verified.
+  ✓ Live /analyze endpoint: All 8 contract blocks strictly verified.
+  ✓ Live /validate: Verified 22 analytical test cases.
+  Contract Check Passed: JSON contracts verified.
+  ```
+- `cd frontend && npx tsc --noEmit`:
+  ```
+  Passed: 0 errors
+  ```
+- `cd frontend && npm run lint`:
+  ```
+  Passed: 0 errors, 0 warnings
+  ```
+- `cd frontend && npm run build`:
+  ```
+  ▲ Next.js 16.4.2 (Turbopack)
+  ✓ Compiled successfully in 11.3s
+  ✓ Generating static pages (4/4) in 1611ms
+  ```
+
+### Decisions and Assumptions
+- Preserved 100% solver physics and validation suite integrity.
+- Made contract changes strictly additive; no existing fields were removed or renamed.
+- Maintained physical truthfulness: findings are never suppressed or hardcoded per design ID; all findings rules are purely generic and driven by solver response numbers.
+
+### Known Issues
+- Pre-existing Starlette `httpx` deprecation warning during test runs.
+
+### Exact Next Step
+- Milestone complete. Present the FIX-FLOW report and findings breakdown to the user.
 
 ## Milestone Agent cache-flow repair
 ### What Was Built & Files Touched

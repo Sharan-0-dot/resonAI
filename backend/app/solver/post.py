@@ -32,6 +32,13 @@ from app.solver.harmonic import ACCEL_BASIS, build_unit_force
 from app.solver.mesh import Mesh
 from app.solver.pipeline import PipelineResult
 
+# Consequence-aware resonance severity thresholds (Rule B2)
+# A resonance crossing within 5% indicates an operational frequency coincidence with a structural mode.
+# If mechanical consequences are within acceptable engineering boundaries (all sensitive payloads under
+# limit_g, structural stresses well below yield, deflections below clearance), the resonance is graded
+# WARNING rather than CRITICAL, preventing alarm fatigue while truthfully flagging the crossing.
+RESONANCE_CROSSING_CRITICAL_BAND: float = 0.05
+STRESS_RATIO_CRITICAL_THRESHOLD: float = 0.50
 CLEARANCE_MM: float = 5.0
 
 
@@ -228,6 +235,35 @@ def generate_findings(
         if exc:
             comp_excitations.append((c_dict, exc))
 
+    # Assess physical consequences across the entire operating range (Rule B2)
+    stress_ratio_val = float(max_stress_dict.get("ratio", 0.0))
+    max_disp_val = (
+        float(np.max(result.node_amp_mm))
+        if (result.node_amp_mm is not None and result.node_amp_mm.size > 0)
+        else 0.0
+    )
+
+    sensitive_comp_data = []
+    for c in components:
+        c_dict = c if isinstance(c, dict) else c.model_dump()
+        lim_g = c_dict.get("limit_g")
+        if lim_g is not None:
+            cid = c_dict.get("id", "comp")
+            peak_g = float(np.max(result.component_accel_g[cid])) if cid in result.component_accel_g else 0.0
+            sensitive_comp_data.append({
+                "id": cid,
+                "limit_g": float(lim_g),
+                "peak_g": peak_g,
+                "exceeded": peak_g > float(lim_g),
+            })
+
+    no_limits_defined = (len(sensitive_comp_data) == 0)
+    any_limit_exceeded = any(sc["exceeded"] for sc in sensitive_comp_data)
+    stress_critical = (stress_ratio_val > STRESS_RATIO_CRITICAL_THRESHOLD)
+    clearance_violated = (max_disp_val > CLEARANCE_MM)
+
+    has_critical_consequence = (no_limits_defined or any_limit_exceeded or stress_critical or clearance_violated)
+
     # --- Rule a: Resonance ---
     # Check each non-rigid mode (ONE finding per mode)
     non_rigid_indices = [i for i, rb in enumerate(result.is_rigid_body) if not rb and result.modes_f_hz[i] > 0.1]
@@ -287,16 +323,6 @@ def generate_findings(
             resonant_sources.sort(key=lambda s: s["diff_ratio"])
             best_source = resonant_sources[0]
             min_diff = best_source["diff_ratio"]
-            severity = "critical" if min_diff <= 0.05 else "warning"
-
-            # Find position of mode's largest amplitude mesh node
-            phi_full = result.model.expand(phi_free)
-            n_mesh = len(result.mesh.nodes)
-            ux_mesh = phi_full[0 : 3 * n_mesh : 3]
-            uy_mesh = phi_full[1 : 3 * n_mesh : 3]
-            node_amps = np.hypot(ux_mesh, uy_mesh)
-            max_node_idx = int(np.argmax(node_amps))
-            best_node = result.mesh.nodes[max_node_idx]
 
             # Unique excitation sources text
             unique_cids = []
@@ -312,14 +338,44 @@ def generate_findings(
                 quoted_cids = [f"'{c}'" for c in unique_cids[:-1]]
                 sources_str = f"{', '.join(quoted_cids)}, and '{unique_cids[-1]}'"
 
-
             o_val = best_source["order"]
             order_str = f"{int(o_val)}x" if o_val.is_integer() else f"{o_val:g}x"
             pct_str = f"{min_diff * 100.0:.1f}%"
-            detail = (
-                f"{order_str} excitation from {sources_str} at {best_source['rpm_closest']:.0f} RPM ({best_source['f_closest']:.1f} Hz) "
-                f"is within {pct_str} of mode {m_idx + 1} ({f_mode:.1f} Hz)"
-            )
+
+            if min_diff <= RESONANCE_CROSSING_CRITICAL_BAND:
+                if has_critical_consequence:
+                    severity = "critical"
+                    detail = (
+                        f"{order_str} excitation from {sources_str} at {best_source['rpm_closest']:.0f} RPM ({best_source['f_closest']:.1f} Hz) "
+                        f"is within {pct_str} of mode {m_idx + 1} ({f_mode:.1f} Hz)"
+                    )
+                else:
+                    severity = "warning"
+                    comp_parts = [
+                        f"{sc['id']} {sc['peak_g']:.2f} g {basis.upper()} of {sc['limit_g']:.2f} g"
+                        for sc in sensitive_comp_data
+                    ]
+                    comp_summary_str = ", ".join(comp_parts)
+                    detail = (
+                        f"Resonance remains at {best_source['rpm_closest']:.0f} RPM ({best_source['f_closest']:.1f} Hz) "
+                        f"but no component exceeds its limit: {comp_summary_str}, stress {stress_ratio_val * 100.0:.1f}% of yield. "
+                        f"Avoid dwelling at this speed."
+                    )
+            else:
+                severity = "warning"
+                detail = (
+                    f"{order_str} excitation from {sources_str} at {best_source['rpm_closest']:.0f} RPM ({best_source['f_closest']:.1f} Hz) "
+                    f"is within {pct_str} of mode {m_idx + 1} ({f_mode:.1f} Hz)"
+                )
+
+            # Find position of mode's largest amplitude mesh node
+            phi_full = result.model.expand(phi_free)
+            n_mesh = len(result.mesh.nodes)
+            ux_mesh = phi_full[0 : 3 * n_mesh : 3]
+            uy_mesh = phi_full[1 : 3 * n_mesh : 3]
+            node_amps = np.hypot(ux_mesh, uy_mesh)
+            max_node_idx = int(np.argmax(node_amps))
+            best_node = result.mesh.nodes[max_node_idx]
 
             findings_raw.append(
                 Finding(
@@ -351,6 +407,8 @@ def generate_findings(
 
         if peak_acc > 0.7 * float(limit_g):
             severity = "critical" if peak_acc > float(limit_g) else "warning"
+            ratio_pct = (peak_acc / float(limit_g)) * 100.0
+            margin_str = f"{peak_acc:.2f} g {basis.upper()} = {ratio_pct:.0f}% of limit"
 
             # Find nearest non-rigid mode
             f_peak = peak_rpm / 60.0
@@ -366,8 +424,7 @@ def generate_findings(
                 freq_ratio = 1.0
 
             detail = (
-                f"Component '{cid}' peak acceleration {peak_acc:.2f} g {basis.upper()} at {peak_rpm:.0f} RPM "
-                f"exceeds limit {float(limit_g):.2f} g {basis.upper()} "
+                f"Component '{cid}' peak acceleration {margin_str} (limit {float(limit_g):.2f} g {basis.upper()}) at {peak_rpm:.0f} RPM "
                 f"(excitation is {freq_ratio:.2f}x of mode {nearest_mode_idx} at {nearest_mode_f:.1f} Hz)"
             )
 
